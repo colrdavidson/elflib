@@ -31,45 +31,45 @@ File_Type :: enum {
 }
 
 Processor_Type :: enum {
-	none           = 0x000,
-	att_we_32100   = 0x001,
-	sparc          = 0x002,
-	x86            = 0x003,
-	m68k           = 0x004,
-	m88k           = 0x005,
-	imcu           = 0x006,
-	i80860         = 0x007,
-	mips           = 0x008,
-	system_370     = 0x009,
-	mips_rs3000_le = 0x00A,
-	hp_pa_risc     = 0x00E,
-	i80960         = 0x013,
-	ppc            = 0x014,
-	ppc_64         = 0x015,
-	s390           = 0x016,
-	ibm_spu        = 0x017,
-	nec_v800       = 0x024,
-	fujitsu_fr20   = 0x025,
-	trw_rh32       = 0x026,
-	motorola_rce   = 0x027,
-	arm            = 0x028,
-	alpha          = 0x029,
-	super_h        = 0x02A,
-	sparc_v9       = 0x02B,
-	siemens_tricore = 0x02C,
-	argonaut_risc   = 0x02D,
-	hitachi_h8_300  = 0x02E,
-	hitachi_h8_300h = 0x02F,
-	hitachi_h8s     = 0x030,
-	hitachi_h8_500  = 0x031,
-	itanium         = 0x032,
-	stanford_mips_x  = 0x033,
+	none              = 0x000,
+	att_we_32100      = 0x001,
+	sparc             = 0x002,
+	x86               = 0x003,
+	m68k              = 0x004,
+	m88k              = 0x005,
+	imcu              = 0x006,
+	i80860            = 0x007,
+	mips              = 0x008,
+	system_370        = 0x009,
+	mips_rs3000_le    = 0x00A,
+	hp_pa_risc        = 0x00E,
+	i80960            = 0x013,
+	ppc               = 0x014,
+	ppc_64            = 0x015,
+	s390              = 0x016,
+	ibm_spu           = 0x017,
+	nec_v800          = 0x024,
+	fujitsu_fr20      = 0x025,
+	trw_rh32          = 0x026,
+	motorola_rce      = 0x027,
+	arm               = 0x028,
+	alpha             = 0x029,
+	super_h           = 0x02A,
+	sparc_v9          = 0x02B,
+	siemens_tricore   = 0x02C,
+	argonaut_risc     = 0x02D,
+	hitachi_h8_300    = 0x02E,
+	hitachi_h8_300h   = 0x02F,
+	hitachi_h8s       = 0x030,
+	hitachi_h8_500    = 0x031,
+	itanium           = 0x032,
+	stanford_mips_x   = 0x033,
 	motorola_coldfire = 0x034,
-	motorola_m68hc12 = 0x035,
-	fujitsu_mma      = 0x036,
-	siemens_pcp      = 0x037,
-	sony_ncpu_risc   = 0x038,
-	denso_ndr1       = 0x039,
+	motorola_m68hc12  = 0x035,
+	fujitsu_mma       = 0x036,
+	siemens_pcp       = 0x037,
+	sony_ncpu_risc    = 0x038,
+	denso_ndr1        = 0x039,
 	motorola_starcore = 0x03A,
 	toyota_me16       = 0x03B,
 	stmicro_st100     = 0x03C,
@@ -144,11 +144,11 @@ Section_Type :: enum u32 {
 	phdr    = 6,
 	tls     = 7,
 	gnu_eh_frame = 0x6474e550,
-	gnu_stack = 0x6474e551,
-	gnu_relro = 0x6474e552,
+	gnu_stack    = 0x6474e551,
+	gnu_relro    = 0x6474e552,
 	gnu_property = 0x6474e553,
-	lowproc = 0x70000000,
-	hiproc  = 0x7FFFFFFF,
+	lowproc      = 0x70000000,
+	hiproc       = 0x7FFFFFFF,
 }
 
 Dynamic_Type :: enum u64 {
@@ -343,7 +343,9 @@ slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
     return intrinsics.unaligned_load((^T)(raw_data(buf))), true
 }
 
-load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Section, err: ELF_Parse_Error) {
+load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Section, err: ELF_Parse_Error, allocator := context.allocator) {
+	context.allocator = allocator
+
 	elf_hdr, rk := slice_to_type(binary_blob, ELF64_Header)
 	if !rk {
 		err = .invalid_file
@@ -433,7 +435,6 @@ load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Sec
 	for i := 0; i < section_header_array_size; i += int(elf_hdr.section_entry_size) {
 		section_hdr, sk := slice_to_type(section_header_blob[i:], ELF64_Section_Header)
 		if !sk {
-
 			free_sections(_sections)
 			err = .invalid_file
 			return
@@ -469,7 +470,6 @@ load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Sec
 		_sections[section_name] = s
 	}
 
-
 	return info, _sections, nil
 }
 
@@ -481,7 +481,9 @@ free_sections :: proc(sections: map[string]Section) {
 	delete(sections)
 }
 
-load_symbols :: proc(sym_section: []u8, str_section: []u8) -> []Symbol {
+load_symbols :: proc(sym_section: []u8, str_section: []u8, allocator := context.allocator) -> []Symbol {
+	context.allocator = allocator
+
 	symbols := make([dynamic]Symbol)
 	for i := 0; i < len(sym_section); i += size_of(ELF64_Sym) {
 		sym_entry, ok := slice_to_type(sym_section[i:], ELF64_Sym)
@@ -509,7 +511,8 @@ free_symbols :: proc(symbols: []Symbol) {
 	delete(symbols)
 }
 
-load_dynamic_libraries :: proc(dyn_section: []u8, str_section: []u8) -> []string {
+load_dynamic_libraries :: proc(dyn_section: []u8, str_section: []u8, allocator := context.allocator) -> []string {
+	context.allocator = allocator
 
 	libraries := make([dynamic]string)
 	for i := 0; i < len(dyn_section); i += size_of(ELF64_Dyn) {
@@ -548,7 +551,6 @@ sort_entries_by_length :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
 	slice.sort_by(entries[:], proc(a: Entry, b: Entry) -> bool { return len(a.value.data) < len(b.value.data) })
 	runtime.__dynamic_map_reset_entries(header, loc)
 }
-
 
 print_sections_by_size :: proc(sections: ^map[string]Section) {
 	sort_entries_by_length(sections)
