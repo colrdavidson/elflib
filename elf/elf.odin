@@ -120,7 +120,7 @@ Section_Flags :: enum u64 {
 	exclude    = 0x8000000,
 }
 
-Section_Header_Type :: enum u32 {
+Section_Header_Type :: enum {
 	null     = 0x00,
 	progbits = 0x01,
 	symtab   = 0x02,
@@ -132,9 +132,16 @@ Section_Header_Type :: enum u32 {
 	nobits   = 0x08,
 	rel      = 0x09,
 	dynsym   = 0x0B,
+	init_array  = 0x0E,
+	fini_array  = 0x0F,
+	gnu_hash    = 0x6FFFFFF6,
+	gnu_verdef  = 0x6FFFFFFD,
+	gnu_verneed = 0x6FFFFFFE,
+	gnu_versym  = 0x6FFFFFFF,
+	unwind      = 0x70000001,
 }
 
-Section_Type :: enum u32 {
+Section_Type :: enum {
 	null    = 0,
 	load    = 1,
 	dyn     = 2,
@@ -151,7 +158,7 @@ Section_Type :: enum u32 {
 	hiproc       = 0x7FFFFFFF,
 }
 
-Dynamic_Type :: enum u64 {
+Dynamic_Type :: enum {
 	null         = 0,
 	needed       = 1,
 	plt_rel_size = 2,
@@ -233,36 +240,35 @@ Symbol :: struct {
 	bind: Symbol_Binding,
 }
 
-ELF64_Header :: struct #packed {
+ELF_Pre_Header :: struct #packed {
 	magic: [4]u8,
 	class: u8,
 	endian: u8,
 	hdr_version: u8,
 	target_abi: u8,
 	pad: [8]u8,
-
-	type: u16,
-	machine: u16,
-	version: u32,
-	entry: u64,
-	program_hdr_offset: u64,
-	section_hdr_offset: u64,
-	flags: u32,
-	ehsize: u16,
-	program_hdr_entry_size: u16,
-	program_hdr_num: u16,
-	section_entry_size: u16,
-	section_hdr_num: u16,
-	section_hdr_str_idx: u16,
 }
 
 ELF32_Header :: struct #packed {
-	magic: [4]u8,
-	class: u8,
-	endian: u8,
-	hdr_version: u8,
-	target_abi: u8,
-	pad: [8]u8,
+	ident: [16]u8,
+
+	type: u16,
+	machine: u16,
+	version: u32,
+	entry: u32,
+	program_hdr_offset: u32,
+	section_hdr_offset: u32,
+	flags: u32,
+	ehsize: u16,
+	program_hdr_entry_size: u16,
+	program_hdr_num: u16,
+	section_entry_size: u16,
+	section_hdr_num: u16,
+	section_hdr_str_idx: u16,
+}
+
+ELF64_Header :: struct #packed {
+	ident: [16]u8,
 
 	type: u16,
 	machine: u16,
@@ -279,7 +285,43 @@ ELF32_Header :: struct #packed {
 	section_hdr_str_idx: u16,
 }
 
+ELF_Header :: struct {
+	program_hdr_offset: u64,
+	section_hdr_offset: u64,
+	program_hdr_num: u16,
+	program_hdr_entry_size: u16,
+	section_entry_size: u16,
+	section_hdr_num: u16,
+	section_hdr_str_idx: u16,
+}
+
+ELF32_Section_Header :: struct #packed {
+	name: u32,
+	type: u32,
+	flags: u32,
+	addr: u32,
+	offset: u32,
+	size: u32,
+	link: u32,
+	info: u32,
+	addr_align: u32,
+	entry_size: u32,
+}
+
 ELF64_Section_Header :: struct #packed {
+	name: u32,
+	type: u32,
+	flags: u64,
+	addr: u64,
+	offset: u64,
+	size: u64,
+	link: u32,
+	info: u32,
+	addr_align: u64,
+	entry_size: u64,
+}
+
+ELF_Section_Header :: struct {
 	name: u32,
 	type: Section_Header_Type,
 	flags: u64,
@@ -292,8 +334,19 @@ ELF64_Section_Header :: struct #packed {
 	entry_size: u64,
 }
 
+ELF32_Program_Header :: struct #packed {
+	type: u32,
+	offset: u32,
+	virtual_addr: u32,
+	physical_addr: u32,
+	file_size: u32,
+	mem_size: u32,
+	flags: u32,
+	align: u32,
+}
+
 ELF64_Program_Header :: struct #packed {
-	type: Section_Type,
+	type: u32,
 	flags: u32,
 	offset: u64,
 	virtual_addr: u64,
@@ -303,9 +356,39 @@ ELF64_Program_Header :: struct #packed {
 	align: u64,
 }
 
+ELF_Program_Header :: struct {
+	type: Section_Type,
+	flags:         u32,
+	offset:        u64,
+	virtual_addr:  u64,
+	physical_addr: u64,
+	file_size:     u64,
+	mem_size:      u64,
+	align:         u64,
+}
+
+ELF32_Dyn :: struct #packed {
+	tag: i32,
+	val: u32,
+}
+
 ELF64_Dyn :: struct #packed {
-	tag: Dynamic_Type,
+	tag: i64,
 	val: u64,
+}
+
+ELF_Dynamic :: struct {
+	tag: i64,
+	val: u64,
+}
+
+ELF32_Sym :: struct #packed {
+	name:  u32,
+	value: u32,
+	size:  u32,
+	info:  u8,
+	other: u8,
+	shndx: u16,
 }
 
 ELF64_Sym :: struct #packed {
@@ -317,23 +400,69 @@ ELF64_Sym :: struct #packed {
 	size:  u64,
 }
 
-ELF_Info :: struct {
+ELF_Symbol :: struct {
+	name:  u32,
+	info:  u8,
+	other: u8,
+	shndx: u16,
+	value: u64,
+	size:  u64,
+}
+
+ELF32_Rel :: struct #packed {
+	offset: u32,
+	info:   u32,
+}
+
+ELF32_Rela :: struct #packed {
+	offset: u32,
+	info:   u32,
+	addend: i32,
+}
+
+ELF64_Rel :: struct #packed {
+	offset: u64,
+	info:   u64,
+}
+
+ELF64_Rela :: struct #packed {
+	offset: u64,
+	info:   u64,
+	addend: i64,
+}
+
+Relocation :: struct {
+	offset: u64,
+	symbol: u32,
+	type:   u32,
+	addend: i64,
+}
+
+Section :: struct {
+	name: string,
+	type: Section_Header_Type,
+	link: u32,
+
+	flags: u64,
+	data: []u8,
+	file_offset: u64,
+	virtual_addr: u64,
+	addr_alignment: u64,
+
+	children: []uint,
+}
+
+ELF_Context :: struct {
 	little_endian: bool,
 	bits_64: bool,
 	target_abi: Target_ABI,
 	file_type: File_Type,
 	isa: Processor_Type,
 	entrypoint: u64,
-}
+	linker_path: string,
 
-Section :: struct {
-	name: string,
-	type: Section_Header_Type,
-	flags: u64,
-	data: []u8,
-	file_offset: u64,
-	virtual_addr: u64,
-	addr_alignment: u64,
+	sections: []Section,
+	section_map: map[string]uint,
 }
 
 slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
@@ -343,77 +472,339 @@ slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
     return intrinsics.unaligned_load((^T)(raw_data(buf))), true
 }
 
-load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Section, err: ELF_Parse_Error, allocator := context.allocator) {
+parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, int, bool) {
+	iter_size := 0
+
+	common_hdr := ELF_Header{}
+	if ctx.bits_64 {
+		hdr, ek := slice_to_type(blob, ELF64_Header)
+		if !ek {
+			return {}, 0, false
+		}
+
+		common_hdr.program_hdr_offset     = hdr.program_hdr_offset
+		common_hdr.program_hdr_num        = hdr.program_hdr_num
+		common_hdr.program_hdr_entry_size = hdr.program_hdr_entry_size
+		common_hdr.section_hdr_offset     = hdr.section_hdr_offset
+		common_hdr.section_hdr_str_idx    = hdr.section_hdr_str_idx
+		common_hdr.section_hdr_num        = hdr.section_hdr_num
+		common_hdr.section_entry_size     = hdr.section_entry_size
+
+		ctx.isa        = Processor_Type(hdr.machine)
+		ctx.file_type  = File_Type(hdr.type)
+		ctx.entrypoint = hdr.entry
+
+		iter_size = size_of(ELF64_Header)
+	} else {
+		hdr, ek := slice_to_type(blob, ELF32_Header)
+		if !ek {
+			return {}, 0, false
+		}
+
+		common_hdr.program_hdr_offset     = u64(hdr.program_hdr_offset)
+		common_hdr.program_hdr_num        = hdr.program_hdr_num
+		common_hdr.program_hdr_entry_size = hdr.program_hdr_entry_size
+		common_hdr.section_hdr_offset     = u64(hdr.section_hdr_offset)
+		common_hdr.section_hdr_str_idx    = hdr.section_hdr_str_idx
+		common_hdr.section_hdr_num        = hdr.section_hdr_num
+		common_hdr.section_entry_size     = hdr.section_entry_size
+
+		ctx.isa        = Processor_Type(hdr.machine)
+		ctx.file_type  = File_Type(hdr.type)
+		ctx.entrypoint = u64(hdr.entry)
+
+		iter_size = size_of(ELF32_Header)
+	}
+
+	return common_hdr, iter_size, true
+}
+
+parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Header, int, bool) {
+	iter_size := 0
+
+	common_hdr := ELF_Program_Header{}
+	if ctx.bits_64 {
+		hdr, strk := slice_to_type(blob, ELF64_Program_Header)
+		if !strk {
+			return {}, 0, false
+		}
+
+		common_hdr.type          = Section_Type(hdr.type)
+		common_hdr.flags         = hdr.flags
+		common_hdr.offset        = hdr.offset
+		common_hdr.virtual_addr  = hdr.virtual_addr
+		common_hdr.physical_addr = hdr.physical_addr
+		common_hdr.file_size     = hdr.file_size
+		common_hdr.mem_size      = hdr.mem_size
+		common_hdr.align         = hdr.align
+
+		iter_size  = size_of(ELF64_Program_Header)
+	} else {
+		hdr, strk := slice_to_type(blob, ELF32_Program_Header)
+		if !strk {
+			return {}, 0, false
+		}
+
+		common_hdr.type          = Section_Type(hdr.type)
+		common_hdr.flags         = hdr.flags
+		common_hdr.offset        = u64(hdr.offset)
+		common_hdr.virtual_addr  = u64(hdr.virtual_addr)
+		common_hdr.physical_addr = u64(hdr.physical_addr)
+		common_hdr.file_size     = u64(hdr.file_size)
+		common_hdr.mem_size      = u64(hdr.mem_size)
+		common_hdr.align         = u64(hdr.align)
+
+		iter_size  = size_of(ELF32_Program_Header)
+	}
+
+	return common_hdr, iter_size, true
+}
+
+parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Header, int, bool) {
+	iter_size := 0
+
+	cmn_hdr := ELF_Section_Header{}
+	if ctx.bits_64 {
+		hdr, strk := slice_to_type(blob, ELF64_Section_Header)
+		if !strk {
+			return {}, 0, false
+		}
+
+		cmn_hdr.name       = hdr.name
+		cmn_hdr.type       = Section_Header_Type(hdr.type)
+		cmn_hdr.flags      = hdr.flags
+		cmn_hdr.addr       = hdr.addr
+		cmn_hdr.offset     = hdr.offset
+		cmn_hdr.size       = hdr.size
+		cmn_hdr.link       = hdr.link
+		cmn_hdr.info       = hdr.info
+		cmn_hdr.addr_align = hdr.addr_align
+		cmn_hdr.entry_size = hdr.entry_size
+
+		iter_size = size_of(ELF64_Section_Header)
+	} else {
+		hdr, strk := slice_to_type(blob, ELF32_Section_Header)
+		if !strk {
+			return {}, 0, false
+		}
+
+		cmn_hdr.name       = hdr.name
+		cmn_hdr.type       = Section_Header_Type(hdr.type)
+		cmn_hdr.flags      = u64(hdr.flags)
+		cmn_hdr.addr       = u64(hdr.addr)
+		cmn_hdr.offset     = u64(hdr.offset)
+		cmn_hdr.size       = u64(hdr.size)
+		cmn_hdr.link       = hdr.link
+		cmn_hdr.info       = hdr.info
+		cmn_hdr.addr_align = u64(hdr.addr_align)
+		cmn_hdr.entry_size = u64(hdr.entry_size)
+
+		iter_size = size_of(ELF32_Section_Header)
+	}
+
+	return cmn_hdr, iter_size, true
+}
+
+parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, int, bool) {
+	iter_size := 0
+
+	cmn_sym := ELF_Symbol{}
+	if ctx.bits_64 {
+		sym, strk := slice_to_type(blob, ELF64_Sym)
+		if !strk {
+			return {}, 0, false
+		}
+
+		cmn_sym.name  = sym.name
+		cmn_sym.info  = sym.info
+		cmn_sym.other = sym.other
+		cmn_sym.shndx = sym.shndx
+		cmn_sym.value = sym.value
+		cmn_sym.size  = sym.size
+
+		iter_size = size_of(ELF64_Sym)
+	} else {
+		sym, strk := slice_to_type(blob, ELF32_Sym)
+		if !strk {
+			return {}, 0, false
+		}
+
+		cmn_sym.name = sym.name
+		cmn_sym.info = sym.info
+		cmn_sym.other = sym.other
+		cmn_sym.shndx = sym.shndx
+		cmn_sym.value = u64(sym.value)
+		cmn_sym.size  = u64(sym.size)
+
+		iter_size = size_of(ELF32_Sym)
+	}
+
+	return cmn_sym, iter_size, true
+
+}
+
+parse_dynamic :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Dynamic, int, bool) {
+	iter_size := 0
+
+	cmn_dyn := ELF_Dynamic{}
+	if ctx.bits_64 {
+		dyn, ok := slice_to_type(blob, ELF64_Dyn)
+		if !ok {
+			return {}, 0, false
+		}
+
+		cmn_dyn.tag = dyn.tag
+		cmn_dyn.val = dyn.val
+
+		iter_size = size_of(ELF64_Dyn)
+	} else {
+		dyn, ok := slice_to_type(blob, ELF32_Dyn)
+		if !ok {
+			return {}, 0, false
+		}
+
+		cmn_dyn.tag = i64(dyn.tag)
+		cmn_dyn.val = u64(dyn.val)
+
+		iter_size = size_of(ELF32_Dyn)
+	}
+
+	return cmn_dyn, iter_size, true
+
+}
+
+parse_reloc :: proc(ctx: ^ELF_Context, blob: []u8, has_addend: bool) -> (Relocation, int, bool) {
+	iter_size := 0
+
+	r := Relocation{}
+	if ctx.bits_64 {
+		if has_addend {
+			reloc, ok := slice_to_type(blob, ELF64_Rela)
+			if !ok {
+				return {}, 0, false
+			}
+
+			r.offset = reloc.offset
+			r.symbol = u32(reloc.info >> 32)
+			r.type   = u32(reloc.info & 0xFFFFFFFF)
+			r.addend = reloc.addend
+			iter_size = size_of(ELF64_Rela)
+		} else {
+			reloc, ok := slice_to_type(blob, ELF64_Rel)
+			if !ok {
+				return {}, 0, false
+			}
+
+			r.offset = reloc.offset
+			r.symbol = u32(reloc.info >> 32)
+			r.type   = u32(reloc.info & 0xFFFFFFFF)
+			iter_size = size_of(ELF64_Rel)
+		}
+	} else {
+		if has_addend {
+			reloc, ok := slice_to_type(blob, ELF32_Rela)
+			if !ok {
+				return {}, 0, false
+			}
+
+			r.offset = u64(reloc.offset)
+			r.symbol = u32(reloc.info >> 8)
+			r.type   = u32(u8(reloc.info))
+			r.addend = i64(reloc.addend)
+			iter_size = size_of(ELF32_Rela)
+		} else {
+			reloc, ok := slice_to_type(blob, ELF32_Rel)
+			if !ok {
+				return {}, 0, false
+			}
+
+			r.offset = u64(reloc.offset)
+			r.symbol = u32(reloc.info >> 8)
+			r.type   = u32(u8(reloc.info))
+			iter_size = size_of(ELF32_Rel)
+		}
+	}
+
+	return r, iter_size, true
+
+}
+
+load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx: ELF_Context, err: ELF_Parse_Error) {
 	context.allocator = allocator
 
-	elf_hdr, rk := slice_to_type(binary_blob, ELF64_Header)
+	pre_hdr, rk := slice_to_type(binary_blob, ELF_Pre_Header)
 	if !rk {
 		err = .invalid_file
 		return
 	}
 
 	elf_magic := []u8{ 0x7f, 'E', 'L', 'F' }
-	if mem.compare(elf_hdr.magic[:], elf_magic) != 0 {
+	if mem.compare(pre_hdr.magic[:], elf_magic) != 0 {
 		err = .invalid_magic
 		return
 	}
 
-	if elf_hdr.hdr_version != 1 {
+	if pre_hdr.hdr_version != 1 {
 		err = .invalid_header_version
 		return
 	}
 
-	info = ELF_Info{}
-	if elf_hdr.class == ELFCLASS64 {
-		info.bits_64 = true;
-	} else if elf_hdr.class == ELFCLASS32 {
-		info.bits_64 = false;
-		fmt.panicf("Can't ELF32!\n")
+	ctx := ELF_Context{}
+	if pre_hdr.class == ELFCLASS64 {
+		ctx.bits_64 = true;
+	} else if pre_hdr.class == ELFCLASS32 {
+		ctx.bits_64 = false;
 	} else {
 		err = .invalid_class
 		return
 	}
 
-	if elf_hdr.endian == ELFDATA2LSB {
-		info.little_endian = true;
-	} else if elf_hdr.endian == ELFDATA2MSB {
-		info.little_endian = false;
+	if pre_hdr.endian == ELFDATA2LSB {
+		ctx.little_endian = true;
+	} else if pre_hdr.endian == ELFDATA2MSB {
+		ctx.little_endian = false;
 	} else {
 		err = .invalid_endianness
 		return
 	}
-	info.isa = Processor_Type(elf_hdr.machine)
-	info.file_type = File_Type(elf_hdr.type)
-	info.target_abi = Target_ABI(elf_hdr.target_abi)
-	info.entrypoint = elf_hdr.entry
+	ctx.target_abi = Target_ABI(pre_hdr.target_abi)
 
-	if elf_hdr.section_hdr_offset > u64(len(binary_blob)) {
+	common_hdr, _, ok := parse_common_header(&ctx, binary_blob)
+	if !ok {
+		err = .invalid_file
+		return
+	}
+
+	if common_hdr.section_hdr_offset > u64(len(binary_blob)) {
 		err = .invalid_section_header_offset
 		return
 	}
 
-	program_header_array_size := int(elf_hdr.program_hdr_num) * int(elf_hdr.program_hdr_entry_size)
-	program_header_blob := binary_blob[int(elf_hdr.program_hdr_offset):int(elf_hdr.program_hdr_offset)+program_header_array_size]
-	for i := 0; i < program_header_array_size; i += int(elf_hdr.program_hdr_entry_size) {
-		prog_hdr, pok := slice_to_type(program_header_blob[i:], ELF64_Program_Header)
+	program_header_array_size := int(common_hdr.program_hdr_num) * int(common_hdr.program_hdr_entry_size)
+	program_header_blob := binary_blob[int(common_hdr.program_hdr_offset):int(common_hdr.program_hdr_offset)+program_header_array_size]
+	for i := 0; i < program_header_array_size; i += int(common_hdr.program_hdr_entry_size) {
+		prog_hdr, _, pok := parse_program_header(&ctx, program_header_blob[i:])
 		if !pok {
 			err = .invalid_file
 			return
 		}
 
-		if prog_hdr.type == Section_Type.interp {
-			linker_path := binary_blob[prog_hdr.offset:prog_hdr.offset+prog_hdr.mem_size]
-			fmt.printf("Using dynamic linker: %s\n", cstring(raw_data(linker_path)))
+		if prog_hdr.type != Section_Type.interp {
+			continue
 		}
+
+		linker_path := binary_blob[prog_hdr.offset:prog_hdr.offset+prog_hdr.mem_size]
+		ctx.linker_path = strings.clone_from_cstring(cstring(raw_data(linker_path)))
+		break
 	}
 
-	str_table_hdr_idx := elf_hdr.section_hdr_offset + u64(elf_hdr.section_hdr_str_idx * elf_hdr.section_entry_size)
+	str_table_hdr_idx := common_hdr.section_hdr_offset + u64(common_hdr.section_hdr_str_idx * common_hdr.section_entry_size)
 	if str_table_hdr_idx > u64(len(binary_blob)) {
 		err = .invalid_string_table_header
 		return
 	}
 
-	str_table_hdr, strk := slice_to_type(binary_blob[str_table_hdr_idx:], ELF64_Section_Header)
+	str_table_hdr, _, strk := parse_section_header(&ctx, binary_blob[str_table_hdr_idx:])
 	if !strk {
 		err = .invalid_file
 		return
@@ -429,32 +820,37 @@ load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Sec
 		return
 	}
 
-	section_header_array_size := int(elf_hdr.section_hdr_num) * int(elf_hdr.section_entry_size)
-	section_header_blob := binary_blob[int(elf_hdr.section_hdr_offset):int(elf_hdr.section_hdr_offset)+section_header_array_size]
-	_sections := make(map[string]Section)
-	for i := 0; i < section_header_array_size; i += int(elf_hdr.section_entry_size) {
-		section_hdr, sk := slice_to_type(section_header_blob[i:], ELF64_Section_Header)
+	section_header_array_size := int(common_hdr.section_hdr_num) * int(common_hdr.section_entry_size)
+	section_header_blob := binary_blob[int(common_hdr.section_hdr_offset):int(common_hdr.section_hdr_offset)+section_header_array_size]
+
+	_sections := make([dynamic]Section)
+	_section_map := make(map[string]uint)
+	for i := 0; i < section_header_array_size; i += int(common_hdr.section_entry_size) {
+		section_hdr, _, sk := parse_section_header(&ctx, section_header_blob[i:])
 		if !sk {
-			free_sections(_sections)
+			delete(_sections)
+			free_sections(_section_map)
 			err = .invalid_file
 			return
 		}
 
 		if section_hdr.offset > u64(len(binary_blob)) {
-			free_sections(_sections)
+			delete(_sections)
+			free_sections(_section_map)
 			err = .invalid_section_offset
 			return
 		}
 
 		section_name_blob := binary_blob[str_table_hdr.offset + u64(section_hdr.name):]
-		if section_name_blob[0] == 0 {
-			continue
+		section_name := ""
+		if section_name_blob[0] != 0 {
+			section_name = strings.clone_from_cstring(cstring(raw_data(section_name_blob)))
 		}
 
-		section_name := strings.clone_from_cstring(cstring(raw_data(section_name_blob)))
 		s := Section{
 			name = section_name,
 			type = section_hdr.type,
+			link = section_hdr.link,
 			flags = section_hdr.flags,
 			file_offset = section_hdr.offset,
 			addr_alignment = section_hdr.addr_align,
@@ -464,16 +860,20 @@ load_elf :: proc(binary_blob: []u8) -> (info: ELF_Info, sections: map[string]Sec
 		if section_hdr.type == .nobits || section_hdr.type == .null {
 			s.data = nil
 		} else {
-			s.data = binary_blob[section_hdr.offset:section_hdr.offset+section_hdr.size]
+			s.data = mem.clone_slice(binary_blob[section_hdr.offset:section_hdr.offset+section_hdr.size])
 		}
 
-		_sections[section_name] = s
+		s_idx := len(_sections)
+		append(&_sections, s)
+		_section_map[section_name] = uint(s_idx)
 	}
 
-	return info, _sections, nil
+	ctx.sections = _sections[:]
+	ctx.section_map = _section_map
+	return ctx, nil
 }
 
-free_sections :: proc(sections: map[string]Section) {
+free_sections :: proc(sections: map[string]uint) {
 	for k, v in sections {
 		delete(k)
 	}
@@ -481,14 +881,22 @@ free_sections :: proc(sections: map[string]Section) {
 	delete(sections)
 }
 
-load_symbols :: proc(sym_section: []u8, str_section: []u8, allocator := context.allocator) -> []Symbol {
+load_symbols :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator := context.allocator) -> ([]Symbol, bool) {
 	context.allocator = allocator
 
+	if !(name in ctx.section_map) || !(strtab in ctx.section_map) {
+		return nil, false
+	}
+
+	sym_section := ctx.sections[ctx.section_map[name]].data
+	str_section := ctx.sections[ctx.section_map[strtab]].data
+
 	symbols := make([dynamic]Symbol)
-	for i := 0; i < len(sym_section); i += size_of(ELF64_Sym) {
-		sym_entry, ok := slice_to_type(sym_section[i:], ELF64_Sym)
+	for i := 0; i < len(sym_section); {
+		sym_entry, iter_size, ok := parse_symbol(ctx, sym_section[i:])
 		if !ok {
-			fmt.panicf("Unable to read ELF symbol tag\n")
+			free_symbols(symbols[:])
+			return nil, false
 		}
 
 		bind := Symbol_Binding(u8(sym_entry.info >> 4))
@@ -498,9 +906,10 @@ load_symbols :: proc(sym_section: []u8, str_section: []u8, allocator := context.
 		s := Symbol{value = sym_entry.value, size = sym_entry.size, bind = bind, type = type, name = sym_name}
 
 		append(&symbols, s)
+		i += iter_size
 	}
 
-	return symbols[:]
+	return symbols[:], true
 }
 
 free_symbols :: proc(symbols: []Symbol) {
@@ -511,23 +920,62 @@ free_symbols :: proc(symbols: []Symbol) {
 	delete(symbols)
 }
 
-load_dynamic_libraries :: proc(dyn_section: []u8, str_section: []u8, allocator := context.allocator) -> []string {
+load_dynamic_libraries :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator := context.allocator) -> ([]string, bool) {
 	context.allocator = allocator
 
+	if !(name in ctx.section_map) || !(strtab in ctx.section_map) {
+		return nil, false
+	}
+
+	dyn_section := ctx.sections[ctx.section_map[name]].data
+	str_section := ctx.sections[ctx.section_map[strtab]].data
+
 	libraries := make([dynamic]string)
-	for i := 0; i < len(dyn_section); i += size_of(ELF64_Dyn) {
-		dyn_entry, ok := slice_to_type(dyn_section[i:], ELF64_Dyn)
+	for i := 0; i < len(dyn_section); {
+		dyn_entry, iter_size, ok := parse_dynamic(ctx, dyn_section[i:])
 		if !ok {
-			fmt.panicf("Unable to read ELF dynamic tag\n")
+			free_dynamic_libraries(libraries[:])
+			return nil, false
 		}
 
-		if dyn_entry.tag == Dynamic_Type.needed {
+		if Dynamic_Type(dyn_entry.tag) == Dynamic_Type.needed {
 			section_name := cstring(raw_data(str_section[dyn_entry.val:]))
 			append(&libraries, strings.clone_from_cstring(section_name))
 		}
+
+		i += iter_size
 	}
 
-	return libraries[:]
+	return libraries[:], true
+}
+
+load_relocations :: proc(ctx: ^ELF_Context, name: string, allocator := context.allocator) -> ([]Relocation, bool) {
+	context.allocator = allocator
+
+	if !(name in ctx.section_map) {
+		return nil, false
+	}
+
+	reloc_section := ctx.sections[ctx.section_map[name]]
+	reloc_bytes := reloc_section.data
+
+	if reloc_section.type != .rela && reloc_section.type != .rel {
+		return nil, false
+	}
+
+	relocations := make([dynamic]Relocation)
+	for i := 0; i < len(reloc_bytes); {
+		reloc, iter_size, ok := parse_reloc(ctx, reloc_bytes[i:], reloc_section.type == .rela)
+		if !ok {
+			delete(relocations)
+			return nil, false
+		}
+
+		append(&relocations, reloc)
+		i += iter_size
+	}
+
+	return relocations[:], true
 }
 
 free_dynamic_libraries :: proc(libraries: []string) {
@@ -538,23 +986,12 @@ free_dynamic_libraries :: proc(libraries: []string) {
 	delete(libraries)
 }
 
-sort_entries_by_length :: proc(m: ^$M/map[$K]$V, loc := #caller_location) {
-	Entry :: struct {
-		hash:  uintptr,
-		next:  int,
-		key:   K,
-		value: V,
-	}
+print_sections_by_size :: proc(ctx: ^ELF_Context, temp_allocator := context.temp_allocator) {
+	context.temp_allocator = temp_allocator
+	sections := mem.clone_slice(ctx.sections, context.temp_allocator)
 
-	header := runtime.__get_map_header(m)
-	entries := (^[dynamic]Entry)(&header.m.entries)
-	slice.sort_by(entries[:], proc(a: Entry, b: Entry) -> bool { return len(a.value.data) < len(b.value.data) })
-	runtime.__dynamic_map_reset_entries(header, loc)
-}
-
-print_sections_by_size :: proc(sections: ^map[string]Section) {
-	sort_entries_by_length(sections)
-	for k, v in sections {
+	slice.sort_by(sections, proc(a: Section, b: Section) -> bool { return len(a.data) < len(b.data) })
+	for v in sections {
 		kb_size := len(v.data) / 1024
 		mb_size := len(v.data) / (1024 * 1024)
 
@@ -569,13 +1006,19 @@ print_sections_by_size :: proc(sections: ^map[string]Section) {
 			fmt.sbprintf(&b, "%d  B", len(v.data))
 		}
 
-		fmt.printf("%022s %07s\n", k, strings.to_string(b))
+		fmt.printf("%022s %07s\n", v.name, strings.to_string(b))
 	}
 }
 
 print_symbols :: proc(symbols: []Symbol) {
 	for symbol in symbols {
 		fmt.printf("0x%08x - %06d B | %06s %07s | %s\n", symbol.value, symbol.size, symbol.bind, symbol.type, symbol.name)
+	}
+}
+
+print_relocations :: proc(ctx: ^ELF_Context, relocations: []Relocation) {
+	for reloc in relocations {
+		fmt.printf("0x%x 0x%x 0x%x + %d\n", reloc.offset, reloc.type, reloc.symbol, reloc.addend)
 	}
 }
 
