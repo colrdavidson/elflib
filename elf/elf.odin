@@ -473,6 +473,14 @@ slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
     return intrinsics.unaligned_load((^T)(raw_data(buf))), true
 }
 
+fe_to_ne :: #force_inline proc(is_little_endian: bool, value: $T) -> T where intrinsics.type_is_integer(T) {
+	if (ODIN_ENDIAN == .Little) != is_little_endian {
+		return intrinsics.byte_swap(value)
+	}
+
+	return value
+}
+
 get_common_header_size :: proc(ctx: ^ELF_Context) -> int {
 	if ctx.bits_64 {
 		return size_of(ELF64_Header)
@@ -489,13 +497,13 @@ parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, bool)
 			return {}, false
 		}
 
-		common_hdr.program_hdr_offset     = hdr.program_hdr_offset
-		common_hdr.program_hdr_num        = hdr.program_hdr_num
-		common_hdr.program_hdr_entry_size = hdr.program_hdr_entry_size
-		common_hdr.section_hdr_offset     = hdr.section_hdr_offset
-		common_hdr.section_hdr_str_idx    = hdr.section_hdr_str_idx
-		common_hdr.section_hdr_num        = hdr.section_hdr_num
-		common_hdr.section_entry_size     = hdr.section_entry_size
+		common_hdr.program_hdr_offset     = fe_to_ne(ctx.little_endian, hdr.program_hdr_offset)
+		common_hdr.program_hdr_num        = fe_to_ne(ctx.little_endian, hdr.program_hdr_num)
+		common_hdr.program_hdr_entry_size = fe_to_ne(ctx.little_endian, hdr.program_hdr_entry_size)
+		common_hdr.section_hdr_offset     = fe_to_ne(ctx.little_endian, hdr.section_hdr_offset)
+		common_hdr.section_hdr_str_idx    = fe_to_ne(ctx.little_endian, hdr.section_hdr_str_idx)
+		common_hdr.section_hdr_num        = fe_to_ne(ctx.little_endian, hdr.section_hdr_num)
+		common_hdr.section_entry_size     = fe_to_ne(ctx.little_endian, hdr.section_entry_size)
 
 		ctx.isa        = Processor_Type(hdr.machine)
 		ctx.file_type  = File_Type(hdr.type)
@@ -506,17 +514,17 @@ parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, bool)
 			return {}, false
 		}
 
-		common_hdr.program_hdr_offset     = u64(hdr.program_hdr_offset)
-		common_hdr.program_hdr_num        = hdr.program_hdr_num
-		common_hdr.program_hdr_entry_size = hdr.program_hdr_entry_size
-		common_hdr.section_hdr_offset     = u64(hdr.section_hdr_offset)
-		common_hdr.section_hdr_str_idx    = hdr.section_hdr_str_idx
-		common_hdr.section_hdr_num        = hdr.section_hdr_num
-		common_hdr.section_entry_size     = hdr.section_entry_size
+		common_hdr.program_hdr_offset     = u64(fe_to_ne(ctx.little_endian, hdr.program_hdr_offset))
+		common_hdr.program_hdr_num        = fe_to_ne(ctx.little_endian, hdr.program_hdr_num)
+		common_hdr.program_hdr_entry_size = fe_to_ne(ctx.little_endian, hdr.program_hdr_entry_size)
+		common_hdr.section_hdr_offset     = u64(fe_to_ne(ctx.little_endian, hdr.section_hdr_offset))
+		common_hdr.section_hdr_str_idx    = fe_to_ne(ctx.little_endian, hdr.section_hdr_str_idx)
+		common_hdr.section_hdr_num        = fe_to_ne(ctx.little_endian, hdr.section_hdr_num)
+		common_hdr.section_entry_size     = fe_to_ne(ctx.little_endian, hdr.section_entry_size)
 
 		ctx.isa        = Processor_Type(hdr.machine)
 		ctx.file_type  = File_Type(hdr.type)
-		ctx.entrypoint = u64(hdr.entry)
+		ctx.entrypoint = u64(fe_to_ne(ctx.little_endian, hdr.entry))
 	}
 
 	return common_hdr, true
@@ -541,28 +549,28 @@ parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Head
 			return {}, false
 		}
 
-		common_hdr.type          = Section_Type(hdr.type)
-		common_hdr.flags         = hdr.flags
-		common_hdr.offset        = hdr.offset
-		common_hdr.virtual_addr  = hdr.virtual_addr
-		common_hdr.physical_addr = hdr.physical_addr
-		common_hdr.file_size     = hdr.file_size
-		common_hdr.mem_size      = hdr.mem_size
-		common_hdr.align         = hdr.align
+		common_hdr.type          = Section_Type(fe_to_ne(ctx.little_endian, hdr.type))
+		common_hdr.flags         = fe_to_ne(ctx.little_endian, hdr.flags)
+		common_hdr.offset        = fe_to_ne(ctx.little_endian, hdr.offset)
+		common_hdr.virtual_addr  = fe_to_ne(ctx.little_endian, hdr.virtual_addr)
+		common_hdr.physical_addr = fe_to_ne(ctx.little_endian, hdr.physical_addr)
+		common_hdr.file_size     = fe_to_ne(ctx.little_endian, hdr.file_size)
+		common_hdr.mem_size      = fe_to_ne(ctx.little_endian, hdr.mem_size)
+		common_hdr.align         = fe_to_ne(ctx.little_endian, hdr.align)
 	} else {
 		hdr, strk := slice_to_type(blob, ELF32_Program_Header)
 		if !strk {
 			return {}, false
 		}
 
-		common_hdr.type          = Section_Type(hdr.type)
-		common_hdr.flags         = hdr.flags
-		common_hdr.offset        = u64(hdr.offset)
-		common_hdr.virtual_addr  = u64(hdr.virtual_addr)
-		common_hdr.physical_addr = u64(hdr.physical_addr)
-		common_hdr.file_size     = u64(hdr.file_size)
-		common_hdr.mem_size      = u64(hdr.mem_size)
-		common_hdr.align         = u64(hdr.align)
+		common_hdr.type          = Section_Type(fe_to_ne(ctx.little_endian, hdr.type))
+		common_hdr.flags         = fe_to_ne(ctx.little_endian, hdr.flags)
+		common_hdr.offset        = u64(fe_to_ne(ctx.little_endian, hdr.offset))
+		common_hdr.virtual_addr  = u64(fe_to_ne(ctx.little_endian, hdr.virtual_addr))
+		common_hdr.physical_addr = u64(fe_to_ne(ctx.little_endian, hdr.physical_addr))
+		common_hdr.file_size     = u64(fe_to_ne(ctx.little_endian, hdr.file_size))
+		common_hdr.mem_size      = u64(fe_to_ne(ctx.little_endian, hdr.mem_size))
+		common_hdr.align         = u64(fe_to_ne(ctx.little_endian, hdr.align))
 	}
 
 	return common_hdr, true
@@ -584,32 +592,32 @@ parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Head
 			return {}, false
 		}
 
-		cmn_hdr.name       = hdr.name
-		cmn_hdr.type       = Section_Header_Type(hdr.type)
-		cmn_hdr.flags      = hdr.flags
-		cmn_hdr.addr       = hdr.addr
-		cmn_hdr.offset     = hdr.offset
-		cmn_hdr.size       = hdr.size
-		cmn_hdr.link       = hdr.link
-		cmn_hdr.info       = hdr.info
-		cmn_hdr.addr_align = hdr.addr_align
-		cmn_hdr.entry_size = hdr.entry_size
+		cmn_hdr.name       = fe_to_ne(ctx.little_endian, hdr.name)
+		cmn_hdr.type       = Section_Header_Type(fe_to_ne(ctx.little_endian, hdr.type))
+		cmn_hdr.flags      = fe_to_ne(ctx.little_endian, hdr.flags)
+		cmn_hdr.addr       = fe_to_ne(ctx.little_endian, hdr.addr)
+		cmn_hdr.offset     = fe_to_ne(ctx.little_endian, hdr.offset)
+		cmn_hdr.size       = fe_to_ne(ctx.little_endian, hdr.size)
+		cmn_hdr.link       = fe_to_ne(ctx.little_endian, hdr.link)
+		cmn_hdr.info       = fe_to_ne(ctx.little_endian, hdr.info)
+		cmn_hdr.addr_align = fe_to_ne(ctx.little_endian, hdr.addr_align)
+		cmn_hdr.entry_size = fe_to_ne(ctx.little_endian, hdr.entry_size)
 	} else {
 		hdr, strk := slice_to_type(blob, ELF32_Section_Header)
 		if !strk {
 			return {}, false
 		}
 
-		cmn_hdr.name       = hdr.name
-		cmn_hdr.type       = Section_Header_Type(hdr.type)
-		cmn_hdr.flags      = u64(hdr.flags)
-		cmn_hdr.addr       = u64(hdr.addr)
-		cmn_hdr.offset     = u64(hdr.offset)
-		cmn_hdr.size       = u64(hdr.size)
-		cmn_hdr.link       = hdr.link
-		cmn_hdr.info       = hdr.info
-		cmn_hdr.addr_align = u64(hdr.addr_align)
-		cmn_hdr.entry_size = u64(hdr.entry_size)
+		cmn_hdr.name       = fe_to_ne(ctx.little_endian, hdr.name)
+		cmn_hdr.type       = Section_Header_Type(fe_to_ne(ctx.little_endian, hdr.type))
+		cmn_hdr.flags      = u64(fe_to_ne(ctx.little_endian, hdr.flags))
+		cmn_hdr.addr       = u64(fe_to_ne(ctx.little_endian, hdr.addr))
+		cmn_hdr.offset     = u64(fe_to_ne(ctx.little_endian, hdr.offset))
+		cmn_hdr.size       = u64(fe_to_ne(ctx.little_endian, hdr.size))
+		cmn_hdr.link       = fe_to_ne(ctx.little_endian, hdr.link)
+		cmn_hdr.info       = fe_to_ne(ctx.little_endian, hdr.info)
+		cmn_hdr.addr_align = u64(fe_to_ne(ctx.little_endian, hdr.addr_align))
+		cmn_hdr.entry_size = u64(fe_to_ne(ctx.little_endian, hdr.entry_size))
 	}
 
 	return cmn_hdr, true
@@ -633,24 +641,24 @@ parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, bool) {
 			return {}, false
 		}
 
-		cmn_sym.name  = sym.name
+		cmn_sym.name  = fe_to_ne(ctx.little_endian, sym.name)
 		cmn_sym.info  = sym.info
 		cmn_sym.other = sym.other
-		cmn_sym.shndx = sym.shndx
-		cmn_sym.value = sym.value
-		cmn_sym.size  = sym.size
+		cmn_sym.shndx = fe_to_ne(ctx.little_endian, sym.shndx)
+		cmn_sym.value = fe_to_ne(ctx.little_endian, sym.value)
+		cmn_sym.size  = fe_to_ne(ctx.little_endian, sym.size)
 	} else {
 		sym, strk := slice_to_type(blob, ELF32_Sym)
 		if !strk {
 			return {}, false
 		}
 
-		cmn_sym.name = sym.name
-		cmn_sym.info = sym.info
+		cmn_sym.name  = fe_to_ne(ctx.little_endian, sym.name)
+		cmn_sym.info  = sym.info
 		cmn_sym.other = sym.other
-		cmn_sym.shndx = sym.shndx
-		cmn_sym.value = u64(sym.value)
-		cmn_sym.size  = u64(sym.size)
+		cmn_sym.shndx = fe_to_ne(ctx.little_endian, sym.shndx)
+		cmn_sym.value = u64(fe_to_ne(ctx.little_endian, sym.value))
+		cmn_sym.size  = u64(fe_to_ne(ctx.little_endian, sym.size))
 	}
 
 	return cmn_sym, true
@@ -673,16 +681,16 @@ parse_dynamic :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Dynamic, bool) {
 			return {}, false
 		}
 
-		cmn_dyn.tag = dyn.tag
-		cmn_dyn.val = dyn.val
+		cmn_dyn.tag = fe_to_ne(ctx.little_endian, dyn.tag)
+		cmn_dyn.val = fe_to_ne(ctx.little_endian, dyn.val)
 	} else {
 		dyn, ok := slice_to_type(blob, ELF32_Dyn)
 		if !ok {
 			return {}, false
 		}
 
-		cmn_dyn.tag = i64(dyn.tag)
-		cmn_dyn.val = u64(dyn.val)
+		cmn_dyn.tag = i64(fe_to_ne(ctx.little_endian, dyn.tag))
+		cmn_dyn.val = u64(fe_to_ne(ctx.little_endian, dyn.val))
 	}
 
 	return cmn_dyn, true
@@ -714,19 +722,19 @@ parse_reloc :: proc(ctx: ^ELF_Context, blob: []u8, has_addend: bool) -> (Relocat
 				return {}, false
 			}
 
-			r.offset = reloc.offset
-			r.symbol = u32(reloc.info >> 32)
-			r.type   = u32(reloc.info & 0xFFFFFFFF)
-			r.addend = reloc.addend
+			r.offset = fe_to_ne(ctx.little_endian, reloc.offset)
+			r.symbol = u32(fe_to_ne(ctx.little_endian, reloc.info) >> 32)
+			r.type   = u32(fe_to_ne(ctx.little_endian, reloc.info) & 0xFFFFFFFF)
+			r.addend = fe_to_ne(ctx.little_endian, reloc.addend)
 		} else {
 			reloc, ok := slice_to_type(blob, ELF64_Rel)
 			if !ok {
 				return {}, false
 			}
 
-			r.offset = reloc.offset
-			r.symbol = u32(reloc.info >> 32)
-			r.type   = u32(reloc.info & 0xFFFFFFFF)
+			r.offset = fe_to_ne(ctx.little_endian, reloc.offset)
+			r.symbol = u32(fe_to_ne(ctx.little_endian, reloc.info) >> 32)
+			r.type   = u32(fe_to_ne(ctx.little_endian, reloc.info) & 0xFFFFFFFF)
 		}
 	} else {
 		if has_addend {
@@ -735,19 +743,19 @@ parse_reloc :: proc(ctx: ^ELF_Context, blob: []u8, has_addend: bool) -> (Relocat
 				return {}, false
 			}
 
-			r.offset = u64(reloc.offset)
-			r.symbol = u32(reloc.info >> 8)
-			r.type   = u32(u8(reloc.info))
-			r.addend = i64(reloc.addend)
+			r.offset = u64(fe_to_ne(ctx.little_endian, reloc.offset))
+			r.symbol = u32(fe_to_ne(ctx.little_endian, reloc.info) >> 8)
+			r.type   = u32(u8(fe_to_ne(ctx.little_endian, reloc.info)))
+			r.addend = i64(fe_to_ne(ctx.little_endian, reloc.addend))
 		} else {
 			reloc, ok := slice_to_type(blob, ELF32_Rel)
 			if !ok {
 				return {}, false
 			}
 
-			r.offset = u64(reloc.offset)
-			r.symbol = u32(reloc.info >> 8)
-			r.type   = u32(u8(reloc.info))
+			r.offset = u64(fe_to_ne(ctx.little_endian, reloc.offset))
+			r.symbol = u32(fe_to_ne(ctx.little_endian, reloc.info) >> 8)
+			r.type   = u32(u8(fe_to_ne(ctx.little_endian, reloc.info)))
 		}
 	}
 

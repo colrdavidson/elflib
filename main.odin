@@ -11,7 +11,7 @@ panic :: proc(fmt_in: string, args: ..any) {
 	os.exit(1)
 }
 
-_timed_main :: proc() {
+_main :: proc() {
 	if len(os.args) < 2 {
 		panic("Please provide elfo a program to parse\n")
 	}
@@ -33,7 +33,7 @@ _timed_main :: proc() {
 	libraries, _ := elf.load_dynamic_libraries(&ctx, ".dynamic", ".dynstr")
 	sym, _ := elf.load_symbols(&ctx, ".symtab", ".strtab")
 	dynsym, _ := elf.load_symbols(&ctx, ".dynsym", ".dynstr")
-	relocations, _ := elf.load_relocations(&ctx, ".rel.dyn")
+	relocations, _ := elf.load_relocations(&ctx, ".rela.dyn")
 
 	parse_end := time.tick_now()
 	fmt.printf("parse time: %s\n", fmt.tprint(time.tick_diff(parse_start, parse_end)))
