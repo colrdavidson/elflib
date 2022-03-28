@@ -233,7 +233,7 @@ ELF_Parse_Error :: enum {
 }
 
 Symbol :: struct {
-	name: string,
+	name: cstring,
 	value: u64,
 	size: u64,
 	type: Symbol_Type,
@@ -469,17 +469,24 @@ slice_to_type :: proc(buf: []u8, $T: typeid) -> (T, bool) #optional_ok {
     if len(buf) < size_of(T) {
         return {}, false
     }
+
     return intrinsics.unaligned_load((^T)(raw_data(buf))), true
 }
 
-parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, int, bool) {
-	iter_size := 0
+get_common_header_size :: proc(ctx: ^ELF_Context) -> int {
+	if ctx.bits_64 {
+		return size_of(ELF64_Header)
+	} else {
+		return size_of(ELF32_Header)
+	}
+}
 
+parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, bool) {
 	common_hdr := ELF_Header{}
 	if ctx.bits_64 {
 		hdr, ek := slice_to_type(blob, ELF64_Header)
 		if !ek {
-			return {}, 0, false
+			return {}, false
 		}
 
 		common_hdr.program_hdr_offset     = hdr.program_hdr_offset
@@ -493,12 +500,10 @@ parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, int, 
 		ctx.isa        = Processor_Type(hdr.machine)
 		ctx.file_type  = File_Type(hdr.type)
 		ctx.entrypoint = hdr.entry
-
-		iter_size = size_of(ELF64_Header)
 	} else {
 		hdr, ek := slice_to_type(blob, ELF32_Header)
 		if !ek {
-			return {}, 0, false
+			return {}, false
 		}
 
 		common_hdr.program_hdr_offset     = u64(hdr.program_hdr_offset)
@@ -512,21 +517,28 @@ parse_common_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Header, int, 
 		ctx.isa        = Processor_Type(hdr.machine)
 		ctx.file_type  = File_Type(hdr.type)
 		ctx.entrypoint = u64(hdr.entry)
-
-		iter_size = size_of(ELF32_Header)
 	}
 
-	return common_hdr, iter_size, true
+	return common_hdr, true
 }
 
-parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Header, int, bool) {
+
+get_program_header_size :: proc(ctx: ^ELF_Context) -> int {
+	if ctx.bits_64 {
+		return size_of(ELF64_Program_Header)
+	} else {
+		return size_of(ELF32_Program_Header)
+	}
+}
+
+parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Header, bool) {
 	iter_size := 0
 
 	common_hdr := ELF_Program_Header{}
 	if ctx.bits_64 {
 		hdr, strk := slice_to_type(blob, ELF64_Program_Header)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		common_hdr.type          = Section_Type(hdr.type)
@@ -537,12 +549,10 @@ parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Head
 		common_hdr.file_size     = hdr.file_size
 		common_hdr.mem_size      = hdr.mem_size
 		common_hdr.align         = hdr.align
-
-		iter_size  = size_of(ELF64_Program_Header)
 	} else {
 		hdr, strk := slice_to_type(blob, ELF32_Program_Header)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		common_hdr.type          = Section_Type(hdr.type)
@@ -553,21 +563,25 @@ parse_program_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Program_Head
 		common_hdr.file_size     = u64(hdr.file_size)
 		common_hdr.mem_size      = u64(hdr.mem_size)
 		common_hdr.align         = u64(hdr.align)
-
-		iter_size  = size_of(ELF32_Program_Header)
 	}
 
-	return common_hdr, iter_size, true
+	return common_hdr, true
 }
 
-parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Header, int, bool) {
-	iter_size := 0
+get_section_header_size :: proc(ctx: ^ELF_Context) -> int {
+	if ctx.bits_64 {
+		return size_of(ELF64_Section_Header)
+	} else {
+		return size_of(ELF32_Section_Header)
+	}
+}
 
+parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Header, bool) {
 	cmn_hdr := ELF_Section_Header{}
 	if ctx.bits_64 {
 		hdr, strk := slice_to_type(blob, ELF64_Section_Header)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_hdr.name       = hdr.name
@@ -580,12 +594,10 @@ parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Head
 		cmn_hdr.info       = hdr.info
 		cmn_hdr.addr_align = hdr.addr_align
 		cmn_hdr.entry_size = hdr.entry_size
-
-		iter_size = size_of(ELF64_Section_Header)
 	} else {
 		hdr, strk := slice_to_type(blob, ELF32_Section_Header)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_hdr.name       = hdr.name
@@ -598,21 +610,27 @@ parse_section_header :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Section_Head
 		cmn_hdr.info       = hdr.info
 		cmn_hdr.addr_align = u64(hdr.addr_align)
 		cmn_hdr.entry_size = u64(hdr.entry_size)
-
-		iter_size = size_of(ELF32_Section_Header)
 	}
 
-	return cmn_hdr, iter_size, true
+	return cmn_hdr, true
 }
 
-parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, int, bool) {
+get_symbol_size :: proc(ctx: ^ELF_Context) -> int {
+	if ctx.bits_64 {
+		return size_of(ELF64_Sym)
+	} else {
+		return size_of(ELF32_Sym)
+	}
+}
+
+parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, bool) {
 	iter_size := 0
 
 	cmn_sym := ELF_Symbol{}
 	if ctx.bits_64 {
 		sym, strk := slice_to_type(blob, ELF64_Sym)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_sym.name  = sym.name
@@ -621,12 +639,10 @@ parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, int, bool) {
 		cmn_sym.shndx = sym.shndx
 		cmn_sym.value = sym.value
 		cmn_sym.size  = sym.size
-
-		iter_size = size_of(ELF64_Sym)
 	} else {
 		sym, strk := slice_to_type(blob, ELF32_Sym)
 		if !strk {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_sym.name = sym.name
@@ -635,97 +651,107 @@ parse_symbol :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Symbol, int, bool) {
 		cmn_sym.shndx = sym.shndx
 		cmn_sym.value = u64(sym.value)
 		cmn_sym.size  = u64(sym.size)
-
-		iter_size = size_of(ELF32_Sym)
 	}
 
-	return cmn_sym, iter_size, true
+	return cmn_sym, true
 
 }
 
-parse_dynamic :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Dynamic, int, bool) {
-	iter_size := 0
+get_dynamic_size :: proc(ctx: ^ELF_Context) -> int {
+	if ctx.bits_64 {
+		return size_of(ELF64_Dyn)
+	} else {
+		return size_of(ELF32_Dyn)
+	}
+}
 
+parse_dynamic :: proc(ctx: ^ELF_Context, blob: []u8) -> (ELF_Dynamic, bool) {
 	cmn_dyn := ELF_Dynamic{}
 	if ctx.bits_64 {
 		dyn, ok := slice_to_type(blob, ELF64_Dyn)
 		if !ok {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_dyn.tag = dyn.tag
 		cmn_dyn.val = dyn.val
-
-		iter_size = size_of(ELF64_Dyn)
 	} else {
 		dyn, ok := slice_to_type(blob, ELF32_Dyn)
 		if !ok {
-			return {}, 0, false
+			return {}, false
 		}
 
 		cmn_dyn.tag = i64(dyn.tag)
 		cmn_dyn.val = u64(dyn.val)
-
-		iter_size = size_of(ELF32_Dyn)
 	}
 
-	return cmn_dyn, iter_size, true
+	return cmn_dyn, true
 
 }
 
-parse_reloc :: proc(ctx: ^ELF_Context, blob: []u8, has_addend: bool) -> (Relocation, int, bool) {
-	iter_size := 0
+get_relocation_size :: proc(ctx: ^ELF_Context, has_addend: bool) -> int {
+	if ctx.bits_64 {
+		if has_addend {
+			return size_of(ELF64_Rela)
+		} else {
+			return size_of(ELF64_Rel)
+		}
+	} else {
+		if has_addend {
+			return size_of(ELF32_Rela)
+		} else {
+			return size_of(ELF32_Rel)
+		}
+	}
+}
 
+parse_reloc :: proc(ctx: ^ELF_Context, blob: []u8, has_addend: bool) -> (Relocation, bool) {
 	r := Relocation{}
 	if ctx.bits_64 {
 		if has_addend {
 			reloc, ok := slice_to_type(blob, ELF64_Rela)
 			if !ok {
-				return {}, 0, false
+				return {}, false
 			}
 
 			r.offset = reloc.offset
 			r.symbol = u32(reloc.info >> 32)
 			r.type   = u32(reloc.info & 0xFFFFFFFF)
 			r.addend = reloc.addend
-			iter_size = size_of(ELF64_Rela)
 		} else {
 			reloc, ok := slice_to_type(blob, ELF64_Rel)
 			if !ok {
-				return {}, 0, false
+				return {}, false
 			}
 
 			r.offset = reloc.offset
 			r.symbol = u32(reloc.info >> 32)
 			r.type   = u32(reloc.info & 0xFFFFFFFF)
-			iter_size = size_of(ELF64_Rel)
 		}
 	} else {
 		if has_addend {
 			reloc, ok := slice_to_type(blob, ELF32_Rela)
 			if !ok {
-				return {}, 0, false
+				return {}, false
 			}
 
 			r.offset = u64(reloc.offset)
 			r.symbol = u32(reloc.info >> 8)
 			r.type   = u32(u8(reloc.info))
 			r.addend = i64(reloc.addend)
-			iter_size = size_of(ELF32_Rela)
 		} else {
 			reloc, ok := slice_to_type(blob, ELF32_Rel)
 			if !ok {
-				return {}, 0, false
+				return {}, false
 			}
 
 			r.offset = u64(reloc.offset)
 			r.symbol = u32(reloc.info >> 8)
 			r.type   = u32(u8(reloc.info))
-			iter_size = size_of(ELF32_Rel)
 		}
 	}
 
-	return r, iter_size, true
+	return r, true
 
 }
 
@@ -769,7 +795,7 @@ load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx:
 	}
 	ctx.target_abi = Target_ABI(pre_hdr.target_abi)
 
-	common_hdr, _, ok := parse_common_header(&ctx, binary_blob)
+	common_hdr, ok := parse_common_header(&ctx, binary_blob)
 	if !ok {
 		err = .invalid_file
 		return
@@ -783,7 +809,7 @@ load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx:
 	program_header_array_size := int(common_hdr.program_hdr_num) * int(common_hdr.program_hdr_entry_size)
 	program_header_blob := binary_blob[int(common_hdr.program_hdr_offset):int(common_hdr.program_hdr_offset)+program_header_array_size]
 	for i := 0; i < program_header_array_size; i += int(common_hdr.program_hdr_entry_size) {
-		prog_hdr, _, pok := parse_program_header(&ctx, program_header_blob[i:])
+		prog_hdr, pok := parse_program_header(&ctx, program_header_blob[i:])
 		if !pok {
 			err = .invalid_file
 			return
@@ -801,34 +827,39 @@ load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx:
 	str_table_hdr_idx := common_hdr.section_hdr_offset + u64(common_hdr.section_hdr_str_idx * common_hdr.section_entry_size)
 	if str_table_hdr_idx > u64(len(binary_blob)) {
 		err = .invalid_string_table_header
+		delete(ctx.linker_path)
 		return
 	}
 
-	str_table_hdr, _, strk := parse_section_header(&ctx, binary_blob[str_table_hdr_idx:])
+	str_table_hdr, strk := parse_section_header(&ctx, binary_blob[str_table_hdr_idx:])
 	if !strk {
 		err = .invalid_file
+		delete(ctx.linker_path)
 		return
 	}
 
 	if str_table_hdr.type != Section_Header_Type.strtab {
 		err = .invalid_string_table_header
+		delete(ctx.linker_path)
 		return
 	}
 
 	if str_table_hdr.offset > u64(len(binary_blob)) {
 		err = .invalid_file
+		delete(ctx.linker_path)
 		return
 	}
 
 	section_header_array_size := int(common_hdr.section_hdr_num) * int(common_hdr.section_entry_size)
 	section_header_blob := binary_blob[int(common_hdr.section_hdr_offset):int(common_hdr.section_hdr_offset)+section_header_array_size]
 
-	_sections := make([dynamic]Section)
+	_sections := make([dynamic]Section, 0, int(common_hdr.section_hdr_num))
 	_section_map := make(map[string]uint)
 	for i := 0; i < section_header_array_size; i += int(common_hdr.section_entry_size) {
-		section_hdr, _, sk := parse_section_header(&ctx, section_header_blob[i:])
+		section_hdr, sk := parse_section_header(&ctx, section_header_blob[i:])
 		if !sk {
 			delete(_sections)
+			delete(ctx.linker_path)
 			free_sections(_section_map)
 			err = .invalid_file
 			return
@@ -836,6 +867,7 @@ load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx:
 
 		if section_hdr.offset > u64(len(binary_blob)) {
 			delete(_sections)
+			delete(ctx.linker_path)
 			free_sections(_section_map)
 			err = .invalid_section_offset
 			return
@@ -860,7 +892,7 @@ load_elf :: proc(binary_blob: []u8, allocator := context.allocator) -> (elf_ctx:
 		if section_hdr.type == .nobits || section_hdr.type == .null {
 			s.data = nil
 		} else {
-			s.data = mem.clone_slice(binary_blob[section_hdr.offset:section_hdr.offset+section_hdr.size])
+			s.data = binary_blob[section_hdr.offset:section_hdr.offset+section_hdr.size]
 		}
 
 		s_idx := len(_sections)
@@ -891,9 +923,10 @@ load_symbols :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator 
 	sym_section := ctx.sections[ctx.section_map[name]].data
 	str_section := ctx.sections[ctx.section_map[strtab]].data
 
-	symbols := make([dynamic]Symbol)
-	for i := 0; i < len(sym_section); {
-		sym_entry, iter_size, ok := parse_symbol(ctx, sym_section[i:])
+	sym_size := get_symbol_size(ctx)
+	symbols := make([dynamic]Symbol, 0, len(sym_section) / sym_size)
+	for i := 0; i < len(sym_section); i += sym_size {
+		sym_entry, ok := parse_symbol(ctx, sym_section[i:])
 		if !ok {
 			free_symbols(symbols[:])
 			return nil, false
@@ -902,25 +935,20 @@ load_symbols :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator 
 		bind := Symbol_Binding(u8(sym_entry.info >> 4))
 		type := Symbol_Type(u8(sym_entry.info & 0xf))
 
-		sym_name := strings.clone_from_cstring(cstring(raw_data(str_section[sym_entry.name:])))
+		sym_name := cstring(raw_data(str_section[sym_entry.name:]))
 		s := Symbol{value = sym_entry.value, size = sym_entry.size, bind = bind, type = type, name = sym_name}
 
 		append(&symbols, s)
-		i += iter_size
 	}
 
 	return symbols[:], true
 }
 
 free_symbols :: proc(symbols: []Symbol) {
-	for i := 0; i < len(symbols); i += 1 {
-		delete(symbols[i].name)
-	}
-
 	delete(symbols)
 }
 
-load_dynamic_libraries :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator := context.allocator) -> ([]string, bool) {
+load_dynamic_libraries :: proc(ctx: ^ELF_Context, name: string, strtab: string, allocator := context.allocator) -> ([]cstring, bool) {
 	context.allocator = allocator
 
 	if !(name in ctx.section_map) || !(strtab in ctx.section_map) {
@@ -930,9 +958,11 @@ load_dynamic_libraries :: proc(ctx: ^ELF_Context, name: string, strtab: string, 
 	dyn_section := ctx.sections[ctx.section_map[name]].data
 	str_section := ctx.sections[ctx.section_map[strtab]].data
 
-	libraries := make([dynamic]string)
-	for i := 0; i < len(dyn_section); {
-		dyn_entry, iter_size, ok := parse_dynamic(ctx, dyn_section[i:])
+
+	dyn_size := get_dynamic_size(ctx)
+	libraries := make([dynamic]cstring, 0, len(dyn_section) / dyn_size)
+	for i := 0; i < len(dyn_section); i += dyn_size {
+		dyn_entry, ok := parse_dynamic(ctx, dyn_section[i:])
 		if !ok {
 			free_dynamic_libraries(libraries[:])
 			return nil, false
@@ -940,13 +970,15 @@ load_dynamic_libraries :: proc(ctx: ^ELF_Context, name: string, strtab: string, 
 
 		if Dynamic_Type(dyn_entry.tag) == Dynamic_Type.needed {
 			section_name := cstring(raw_data(str_section[dyn_entry.val:]))
-			append(&libraries, strings.clone_from_cstring(section_name))
+			append(&libraries, section_name)
 		}
-
-		i += iter_size
 	}
 
 	return libraries[:], true
+}
+
+free_dynamic_libraries :: proc(libraries: []cstring) {
+	delete(libraries)
 }
 
 load_relocations :: proc(ctx: ^ELF_Context, name: string, allocator := context.allocator) -> ([]Relocation, bool) {
@@ -963,27 +995,19 @@ load_relocations :: proc(ctx: ^ELF_Context, name: string, allocator := context.a
 		return nil, false
 	}
 
-	relocations := make([dynamic]Relocation)
-	for i := 0; i < len(reloc_bytes); {
-		reloc, iter_size, ok := parse_reloc(ctx, reloc_bytes[i:], reloc_section.type == .rela)
+	reloc_size := get_relocation_size(ctx, reloc_section.type == .rela)
+	relocations := make([dynamic]Relocation, 0, len(reloc_bytes) / reloc_size)
+	for i := 0; i < len(reloc_bytes); i += reloc_size {
+		reloc, ok := parse_reloc(ctx, reloc_bytes[i:], reloc_section.type == .rela)
 		if !ok {
 			delete(relocations)
 			return nil, false
 		}
 
 		append(&relocations, reloc)
-		i += iter_size
 	}
 
 	return relocations[:], true
-}
-
-free_dynamic_libraries :: proc(libraries: []string) {
-	for i := 0; i < len(libraries); i += 1 {
-		delete(libraries[i])
-	}
-
-	delete(libraries)
 }
 
 print_sections_by_size :: proc(ctx: ^ELF_Context, temp_allocator := context.temp_allocator) {
@@ -1022,7 +1046,7 @@ print_relocations :: proc(ctx: ^ELF_Context, relocations: []Relocation) {
 	}
 }
 
-print_dynamic_libraries :: proc(libraries: []string) {
+print_dynamic_libraries :: proc(libraries: []cstring) {
 	for i := 0; i < len(libraries); i += 1 {
 		fmt.printf("NEEDED %s\n", libraries[i])
 	}
